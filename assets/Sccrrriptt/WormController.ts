@@ -37,15 +37,45 @@ export class WormController extends Component {
         const children = this.node.children;
         if (children.length < 2) return;
 
+        // 1. Isolate the Head
         this.headNode = children[0];
-        this.segments = children.slice(1);
-        this.allParts = children;
+        
+        // 2. Put all other children into a "Unsorted" list
+        let unsortedSegments = children.slice(1);
+        this.segments = []; // Clear the script's segment list to rebuild it
 
-        // 1. Capture the EXACT look of the snake from the Editor
+        // 3. SMART SORT LOGIC
+        // We start at the head and look for the closest piece.
+        let currentPiece = this.headNode;
+
+        while (unsortedSegments.length > 0) {
+            let closestIndex = 0;
+            let minDistance = 1000;
+
+            for (let j = 0; j < unsortedSegments.length; j++) {
+                let d = Vec3.distance(currentPiece.worldPosition, unsortedSegments[j].worldPosition);
+                if (d < minDistance) {
+                    minDistance = d;
+                    closestIndex = j;
+                }
+            }
+
+            // We found the true "Next" segment in the snake's body
+            let nextSegment = unsortedSegments[closestIndex];
+            this.segments.push(nextSegment);
+            
+            // Remove it from unsorted and make it the new point to search from
+            unsortedSegments.splice(closestIndex, 1);
+            currentPiece = nextSegment;
+        }
+
+        this.allParts = [this.headNode, ...this.segments];
+
+        // Capture the EXACT look of the snake from the Editor
         this.startPositions = this.allParts.map(p => p.worldPosition.clone());
         this.startRotations = this.allParts.map(p => p.worldRotation.clone());
 
-        // 2. Pre-record the editor path (the spiral)
+        // Pre-record the editor path (the spiral)
         this.buildInitialPath();
     }
 
@@ -85,7 +115,7 @@ export class WormController extends Component {
         for (const part of this.allParts) {
             const sPos = new Vec3();
             this.mainCamera.worldToScreen(part.worldPosition, sPos);
-            if (Vec2.distance(touchPos, new Vec2(sPos.x, sPos.y)) < 15) {
+            if (Vec2.distance(touchPos, new Vec2(sPos.x, sPos.y)) < 9) {
                 this.beginSlither();
                 break;
             }
@@ -131,19 +161,44 @@ export class WormController extends Component {
         }
     }
 
-    private isObstacleAhead(): boolean {
+   private isObstacleAhead(): boolean {
         const others = director.getScene()!.getComponentsInChildren(WormController);
+
+        // This point is 0.5 units directly in front of the snake's mouth
+        const sensorPoint = this.headNode.worldPosition.clone().add(this.moveDirection.clone().multiplyScalar(0.5));
+
         for (let other of others) {
             if (other === this || !other.node.active) continue;
+
             for (let part of other.allParts) {
-                if (Vec3.distance(this.headNode.worldPosition, part.worldPosition) < this.sensingDistance) {
-                    return true;
+                // 1. Check distance to sensor point
+                const dx = sensorPoint.x - part.worldPosition.x;
+                const dz = sensorPoint.z - part.worldPosition.z;
+                const horizontalDist = Math.sqrt(dx * dx + dz * dz);
+
+                // If a body part is very close to the "mouth sensor"...
+                if (horizontalDist < 0.35) { // Narrower radius for narrow lanes
+                    
+                    // 2. ADDITIONAL CHECK: Is this part actually in FRONT?
+                    // We calculate the vector from our head to the neighbor part
+                    const toOther = new Vec3();
+                    Vec3.subtract(toOther, part.worldPosition, this.headNode.worldPosition);
+                    toOther.normalize();
+
+                    // Calculate "Forwardness" (Dot Product)
+                    // 1.0 means exactly in front, 0.0 means side, -1.0 means behind
+                    const dot = Vec3.dot(this.moveDirection, toOther);
+
+                    // Only stop if the part is in a 45-degree cone in front (dot > 0.7)
+                    if (dot > 0.7) {
+                        console.log("Blocking obstacle found in front!");
+                        return true; 
+                    }
                 }
             }
         }
         return false;
     }
-
     private applyPathToBody() {
         let pIdx = 0;
         let lastNodePos = this.headNode.worldPosition;
