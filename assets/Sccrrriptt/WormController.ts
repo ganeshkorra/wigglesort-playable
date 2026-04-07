@@ -115,7 +115,7 @@ export class WormController extends Component {
         for (const part of this.allParts) {
             const sPos = new Vec3();
             this.mainCamera.worldToScreen(part.worldPosition, sPos);
-            if (Vec2.distance(touchPos, new Vec2(sPos.x, sPos.y)) < 9) {
+            if (Vec2.distance(touchPos, new Vec2(sPos.x, sPos.y)) < 5) {
                 this.beginSlither();
                 break;
             }
