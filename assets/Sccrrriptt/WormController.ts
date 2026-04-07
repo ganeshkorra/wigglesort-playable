@@ -16,7 +16,7 @@ export class WormController extends Component {
     segmentSpacing: number = 0.28;
 
     @property
-    collisionRadius: number = 0.35; // Radius of sensing. Adjust based on your model size.
+    sensingDistance: number = 0.6; // sensing obstacle radius
 
     private headNode: Node = null!;
     private segments: Node[] = []; 
@@ -24,10 +24,14 @@ export class WormController extends Component {
     
     private state: SnakeState = SnakeState.IDLE;
     private moveDirection: Vec3 = new Vec3();
-    private trail: Vec3[] = [];
     
-    // Position to return to
-    private startPosition: Vec3 = new Vec3();
+    // THE RECORDED TRACK
+    private track: Vec3[] = []; 
+    private startPathSize: number = 0;
+
+    // EDITOR SNAPSHOTS
+    private startPositions: Vec3[] = [];
+    private startRotations: Quat[] = [];
 
     onLoad() {
         const children = this.node.children;
@@ -36,22 +40,38 @@ export class WormController extends Component {
         this.headNode = children[0];
         this.segments = children.slice(1);
         this.allParts = children;
-        this.startPosition = this.headNode.worldPosition.clone();
 
-        // Initial Road Setup
-        this.initTrail();
+        // 1. Capture the EXACT look of the snake from the Editor
+        this.startPositions = this.allParts.map(p => p.worldPosition.clone());
+        this.startRotations = this.allParts.map(p => p.worldRotation.clone());
+
+        // 2. Pre-record the editor path (the spiral)
+        this.buildInitialPath();
     }
 
-    private initTrail() {
-        this.trail = [];
+    private buildInitialPath() {
+        this.track = [];
         for (let i = 0; i < this.allParts.length - 1; i++) {
-            const start = this.allParts[i].worldPosition;
-            const end = this.allParts[i + 1].worldPosition;
-            for (let t = 0; t < 40; t++) {
-                this.trail.push(Vec3.lerp(new Vec3(), start, end, t / 40));
+            const a = this.allParts[i].worldPosition;
+            const b = this.allParts[i + 1].worldPosition;
+            const steps = 60; // Very high density
+            for (let t = 0; t < steps; t++) {
+                this.track.push(Vec3.lerp(new Vec3(), a, b, t / steps));
             }
         }
-        this.trail.push(this.allParts[this.allParts.length - 1].worldPosition.clone());
+        this.track.push(this.allParts[this.allParts.length-1].worldPosition.clone());
+        this.startPathSize = this.track.length;
+    }
+
+    private forceResetToStart() {
+        // SNAP back to pixel-perfect Editor values
+        for (let i = 0; i < this.allParts.length; i++) {
+            this.allParts[i].setWorldPosition(this.startPositions[i]);
+            this.allParts[i].setWorldRotation(this.startRotations[i]);
+        }
+        this.track = [];
+        this.buildInitialPath();
+        this.state = SnakeState.IDLE;
     }
 
     start() {
@@ -62,128 +82,101 @@ export class WormController extends Component {
         if (this.state !== SnakeState.IDLE) return;
 
         const touchPos = event.getLocation(); 
-        let clickedMe = false;
         for (const part of this.allParts) {
-            const screenPos = new Vec3();
-            this.mainCamera.worldToScreen(part.worldPosition, screenPos);
-            const dist = Vec2.distance(touchPos, new Vec2(screenPos.x, screenPos.y));
-            if (dist < 15) { clickedMe = true; break; }
+            const sPos = new Vec3();
+            this.mainCamera.worldToScreen(part.worldPosition, sPos);
+            if (Vec2.distance(touchPos, new Vec2(sPos.x, sPos.y)) < 15) {
+                this.beginSlither();
+                break;
+            }
         }
+    }
 
-        if (clickedMe) {
-            Vec3.transformQuat(this.moveDirection, new Vec3(-1, 0, 0), this.headNode.worldRotation);
-            this.moveDirection.normalize();
-            this.state = SnakeState.GOING;
-        }
+    private beginSlither() {
+        Vec3.transformQuat(this.moveDirection, new Vec3(-1, 0, 0), this.headNode.worldRotation);
+        this.moveDirection.normalize();
+        this.state = SnakeState.GOING;
     }
 
     update(dt: number) {
         if (this.state === SnakeState.IDLE) return;
 
         if (this.state === SnakeState.GOING) {
-            this.handleGoing(dt);
-            this.checkObstacles();
+            if (this.isObstacleAhead()) {
+                this.state = SnakeState.RETURNING;
+            } else {
+                const step = this.moveDirection.clone().multiplyScalar(this.moveSpeed * dt);
+                const nextPos = this.headNode.worldPosition.clone().add(step);
+                this.headNode.worldPosition = nextPos;
+                this.track.unshift(nextPos.clone());
+            }
         } else if (this.state === SnakeState.RETURNING) {
-            this.handleReturning(dt);
-        }
-
-        this.updateSegments();
-        this.handleExit();
-    }
-
-    private handleGoing(dt: number) {
-        const moveStep = this.moveDirection.clone().multiplyScalar(this.moveSpeed * dt);
-        const newPos = this.headNode.worldPosition.clone().add(moveStep);
-        this.headNode.worldPosition = newPos;
-        this.trail.unshift(newPos.clone());
-    }
-
-    private handleReturning(dt: number) {
-        // Move the head back towards start position
-        const dirToHome = new Vec3();
-        Vec3.subtract(dirToHome, this.startPosition, this.headNode.worldPosition);
-        
-        if (dirToHome.length() < 0.1) {
-            // BACK HOME
-            this.headNode.worldPosition = this.startPosition.clone();
-            this.state = SnakeState.IDLE;
-            this.initTrail(); // Reset trail to initial setup
-            this.updateSegments();
-            return;
-        }
-
-        dirToHome.normalize();
-        const moveStep = dirToHome.multiplyScalar(this.moveSpeed * dt);
-        this.headNode.worldPosition = this.headNode.worldPosition.add(moveStep);
-        
-        // Remove breadcrumbs as we go back
-        if (this.trail.length > this.allParts.length * 10) {
-            this.trail.shift();
-        }
-    }
-
-    private checkObstacles() {
-        // Find every other snake in the level
-        const allSnakes = this.node.parent?.getComponentsInChildren(WormController);
-        if (!allSnakes) return;
-
-        for (let otherSnake of allSnakes) {
-            if (otherSnake === this) continue; // Don't hit yourself
-
-            // Check head against every part of the OTHER snake
-            for (let part of otherSnake.allParts) {
-                const dist = Vec3.distance(this.headNode.worldPosition, part.worldPosition);
-                
-                // If head gets too close to another snake's body
-                if (dist < this.collisionRadius) {
-                    console.log("Blocked! Returning to home...");
-                    this.state = SnakeState.RETURNING;
+            // RETURN MODE: Rewind the recorded track
+            // Use 3 steps per frame to make it snap back fast
+            for(let i=0; i<4; i++){
+                if (this.track.length > this.startPathSize) {
+                    this.track.shift();
+                    this.headNode.worldPosition = this.track[0].clone();
+                } else {
+                    this.forceResetToStart();
                     return;
                 }
             }
         }
+
+        this.applyPathToBody();
+        
+        if (this.state === SnakeState.GOING && this.headNode.worldPosition.length() > 60) {
+            this.node.active = false;
+        }
     }
 
-    private updateSegments() {
-        let trailPtr = 0;
-        let lastPos = this.headNode.worldPosition;
+    private isObstacleAhead(): boolean {
+        const others = director.getScene()!.getComponentsInChildren(WormController);
+        for (let other of others) {
+            if (other === this || !other.node.active) continue;
+            for (let part of other.allParts) {
+                if (Vec3.distance(this.headNode.worldPosition, part.worldPosition) < this.sensingDistance) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private applyPathToBody() {
+        let pIdx = 0;
+        let lastNodePos = this.headNode.worldPosition;
 
         for (let i = 0; i < this.segments.length; i++) {
             const segment = this.segments[i];
-            let currentDist = 0;
+            let distCovered = 0;
 
-            while (trailPtr < this.trail.length - 1) {
-                const gap = Vec3.distance(this.trail[trailPtr], this.trail[trailPtr + 1]);
-                if (currentDist + gap >= this.segmentSpacing) {
-                    const ratio = (this.segmentSpacing - currentDist) / gap;
-                    const pos = Vec3.lerp(new Vec3(), this.trail[trailPtr], this.trail[trailPtr + 1], ratio);
-                    segment.worldPosition = pos;
+            while (pIdx < this.track.length - 1) {
+                const d = Vec3.distance(this.track[pIdx], this.track[pIdx+1]);
+                if (distCovered + d >= this.segmentSpacing) {
+                    const ratio = (this.segmentSpacing - distCovered) / d;
+                    const target = Vec3.lerp(new Vec3(), this.track[pIdx], this.track[pIdx+1], ratio);
+                    segment.worldPosition = target;
 
-                    // Face forward or backward depending on state
-                    const lookDir = new Vec3();
-                    Vec3.subtract(lookDir, lastPos, pos);
-                    if (lookDir.length() > 0.001) {
+                    // Direction
+                    const dir = new Vec3();
+                    Vec3.subtract(dir, lastNodePos, target);
+                    if (dir.length() > 0.01) {
                         let rot = new Quat();
-                        Quat.fromViewUp(rot, lookDir.normalize(), Vec3.UP);
+                        Quat.fromViewUp(rot, dir.normalize(), Vec3.UP);
                         let flip = new Quat();
                         Quat.fromEuler(flip, 0, 180, 0); 
                         Quat.multiply(rot, rot, flip);
                         segment.worldRotation = rot;
                     }
-                    
-                    lastPos = pos.clone();
+                    lastNodePos = target.clone();
                     break;
                 } else {
-                    currentDist += gap;
-                    trailPtr++;
+                    distCovered += d;
+                    pIdx++;
                 }
             }
-        }
-    }
-
-    private handleExit() {
-        if (this.state === SnakeState.GOING && this.headNode.worldPosition.length() > 60) {
-            this.node.active = false; // Vanish when escaped
         }
     }
 
