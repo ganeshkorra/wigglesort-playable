@@ -1,0 +1,93 @@
+{
+  "ver": "2.3.14",
+  "importer": "gltf",
+  "imported": true,
+  "uuid": "190040f3-4615-4952-a9cf-d4b9048b4370",
+  "files": [],
+  "subMetas": {
+    "a62fe": {
+      "importer": "gltf-mesh",
+      "uuid": "190040f3-4615-4952-a9cf-d4b9048b4370@a62fe",
+      "displayName": "",
+      "id": "a62fe",
+      "name": "Scene.mesh",
+      "userData": {
+        "gltfIndex": 0,
+        "triangleCount": 5800
+      },
+      "ver": "1.1.1",
+      "imported": true,
+      "files": [
+        ".bin",
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "e59fc": {
+      "importer": "gltf-material",
+      "uuid": "190040f3-4615-4952-a9cf-d4b9048b4370@e59fc",
+      "displayName": "",
+      "id": "e59fc",
+      "name": "Default-Material.material",
+      "userData": {
+        "gltfIndex": 0
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "26d8e": {
+      "importer": "gltf-scene",
+      "uuid": "190040f3-4615-4952-a9cf-d4b9048b4370@26d8e",
+      "displayName": "",
+      "id": "26d8e",
+      "name": "Circular path.prefab",
+      "userData": {
+        "gltfIndex": 0
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    }
+  },
+  "userData": {
+    "imageMetas": [],
+    "lods": {
+      "enable": false,
+      "hasBuiltinLOD": false,
+      "options": [
+        {
+          "screenRatio": 0.25,
+          "faceCount": 1
+        },
+        {
+          "screenRatio": 0.125,
+          "faceCount": 0.25
+        },
+        {
+          "screenRatio": 0.01,
+          "faceCount": 0.1
+        }
+      ]
+    },
+    "assetFinder": {
+      "meshes": [
+        "190040f3-4615-4952-a9cf-d4b9048b4370@a62fe"
+      ],
+      "skeletons": [],
+      "textures": [],
+      "materials": [
+        "190040f3-4615-4952-a9cf-d4b9048b4370@e59fc"
+      ],
+      "scenes": [
+        "190040f3-4615-4952-a9cf-d4b9048b4370@26d8e"
+      ]
+    }
+  }
+}

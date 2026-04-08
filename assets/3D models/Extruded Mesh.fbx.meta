@@ -1,0 +1,96 @@
+{
+  "ver": "2.3.14",
+  "importer": "fbx",
+  "imported": true,
+  "uuid": "29939fa1-c468-4409-8c21-d2d7d162bbb1",
+  "files": [],
+  "subMetas": {
+    "a62fe": {
+      "importer": "gltf-mesh",
+      "uuid": "29939fa1-c468-4409-8c21-d2d7d162bbb1@a62fe",
+      "displayName": "",
+      "id": "a62fe",
+      "name": "Scene.mesh",
+      "userData": {
+        "gltfIndex": 0,
+        "triangleCount": 5800
+      },
+      "ver": "1.1.1",
+      "imported": true,
+      "files": [
+        ".bin",
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "e59fc": {
+      "importer": "gltf-material",
+      "uuid": "29939fa1-c468-4409-8c21-d2d7d162bbb1@e59fc",
+      "displayName": "",
+      "id": "e59fc",
+      "name": "Default-Material.material",
+      "userData": {
+        "gltfIndex": 0
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    },
+    "46db6": {
+      "importer": "gltf-scene",
+      "uuid": "29939fa1-c468-4409-8c21-d2d7d162bbb1@46db6",
+      "displayName": "",
+      "id": "46db6",
+      "name": "Extruded Mesh.prefab",
+      "userData": {
+        "gltfIndex": 0
+      },
+      "ver": "1.0.14",
+      "imported": true,
+      "files": [
+        ".json"
+      ],
+      "subMetas": {}
+    }
+  },
+  "userData": {
+    "imageMetas": [],
+    "fbx": {
+      "smartMaterialEnabled": true
+    },
+    "lods": {
+      "enable": false,
+      "hasBuiltinLOD": false,
+      "options": [
+        {
+          "screenRatio": 0.25,
+          "faceCount": 1
+        },
+        {
+          "screenRatio": 0.125,
+          "faceCount": 0.25
+        },
+        {
+          "screenRatio": 0.01,
+          "faceCount": 0.1
+        }
+      ]
+    },
+    "assetFinder": {
+      "meshes": [
+        "29939fa1-c468-4409-8c21-d2d7d162bbb1@a62fe"
+      ],
+      "skeletons": [],
+      "textures": [],
+      "materials": [
+        "29939fa1-c468-4409-8c21-d2d7d162bbb1@e59fc"
+      ],
+      "scenes": [
+        "29939fa1-c468-4409-8c21-d2d7d162bbb1@46db6"
+      ]
+    }
+  }
+}
