@@ -90,11 +90,10 @@ export class Hole extends Component {
         return required.toLowerCase() === snakeColor.toLowerCase();
     }
 
-    public getNeededColor(): string {
-        if (this.colorMappings.length === 0) return "";
-        return this.colorMappings[this.currentIndex].colorName;
-    }
-
+   public getNeededColor(): string {
+    // Looks at the current material name required in your Color Mapping list
+    return this.colorMappings[this.currentIndex].colorName;
+}
     public onSnakeSorted() {
         if (GameManager.instance) GameManager.instance.playSFX('destroy');
         this.sortedCount++;

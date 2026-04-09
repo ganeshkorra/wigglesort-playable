@@ -104,17 +104,47 @@ export class GameManager extends Component {
         }
     }
 
-    private showHint() {
+   private showHint() {
         if (!this.holeNode || !this.handNode) return;
-        const color = this.holeNode.getNeededColor();
+        
+        // 1. READ the specific goal color currently requested by the Hole
+        const targetColorName = this.holeNode.getNeededColor().toLowerCase(); 
         const snakes = director.getScene()!.getComponentsInChildren(WormController);
+        
+        let validWormTarget: WormController | null = null;
+
+        // 2. CRITICAL LOOP: Only find correct color AND exitable
         for (let worm of snakes) {
-            if (worm.node.active && worm.isIdle() && worm.snakeColor === color && worm.canSlitherOut()) {
-                let head = worm.node.children[0];
-                this.handNode.setWorldPosition(head.worldPosition.clone().add(new Vec3(0, 1.5, 0)));
-                this.handNode.active = true;
-                return;
+            // Match color string exactly (Grey, Red, etc.)
+            const wormColorMatch = worm.snakeColor.toLowerCase() === targetColorName;
+
+            if (worm.node.active && worm.isIdle() && wormColorMatch && worm.canSlitherOut()) {
+                validWormTarget = worm;
+                break; // Found the perfect candidate
             }
+        }
+
+        // 3. Fallback: If the color we NEED is blocked, point to any snake that acts as an OBSTACLE CLEARER
+        // This is necessary because players can get stuck if they only focus on color
+        if (!validWormTarget) {
+            for (let worm of snakes) {
+                if (worm.node.active && worm.isIdle() && worm.canSlitherOut()) {
+                    validWormTarget = worm;
+                    break;
+                }
+            }
+        }
+
+        // 4. Update visuals
+        if (validWormTarget) {
+            const head = validWormTarget.node.children[0];
+            const targetPos = head.worldPosition.clone().add(new Vec3(0, 1.5, 0));
+            
+            this.handNode.setWorldPosition(targetPos);
+            this.handNode.active = true;
+        } else {
+            // If even blockers are jammed, hide hand to signal full puzzle blockage
+            this.handNode.active = false;
         }
     }
 

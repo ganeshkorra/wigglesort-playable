@@ -1,4 +1,4 @@
-import { _decorator, Component, Node, input, Input, EventTouch, Camera, Vec3, Vec2, Quat, director } from 'cc';
+import { _decorator, Component, Node, input, Input, EventTouch, Camera, Vec3, Vec2, Quat, director, tween } from 'cc';
 import { CirclePath } from './CirclePath';
 import { Hole } from './Hole';
 import { GameManager } from './GameManager';
@@ -82,38 +82,86 @@ export class WormController extends Component {
 
     start() { input.on(Input.EventType.TOUCH_START, this.onTouchStart, this); }
 
-    onTouchStart(event: EventTouch) {
-        if (GameManager.instance) {
-            GameManager.instance.onUserInteraction();
-            GameManager.instance.beginTimer();
-        }
+   onTouchStart(event: EventTouch) {
+        if (GameManager.instance && GameManager.instance.getIsGameOver()) return;
         if (this.state !== SnakeState.IDLE) return;
 
-        if (TutorialHand.instance) {
-            TutorialHand.instance.resetIdleTimer();
-        }
-
-        let clickedMe = false;
         const touchPos = event.getLocation(); 
+        let clickedMe = false;
         for (const part of this.allParts) {
             const sPos = new Vec3();
             this.mainCamera.worldToScreen(part.worldPosition, sPos);
-            if (Vec2.distance(touchPos, new Vec2(sPos.x, sPos.y)) < 30) {
-                clickedMe = true;
-                break;
+            if (Vec2.distance(touchPos, new Vec2(sPos.x, sPos.y)) < 10) {
+                clickedMe = true; break;
             }
         }
 
         if (clickedMe) {
+            if (GameManager.instance) {
+                GameManager.instance.onUserInteraction();
+                GameManager.instance.beginTimer();
+            }
+
+            const blockageDist = this.getObstacleDistance();
+
+            // Case A: Fully Clear -> Go out to Circular Path
             if (this.canSlitherOut()) {
                 GameManager.instance.playSFX('tap');
                 this.beginSlither();
-            } else {
+            } 
+            // Case B: Touching/Almost touching -> Shake like a wave in place
+            else if (blockageDist < 0.2) {
                 GameManager.instance.playSFX('wrong');
+                this.playSnakeShake();
+            }
+            // Case C: Space exists before obstacle -> Slither until bump then Return
+            else {
+                GameManager.instance.playSFX('tap'); // It starts moving normally
+                this.beginSlither();
             }
         }
     }
 
+    private getObstacleDistance(): number {
+        let fDir = new Vec3();
+        Vec3.transformQuat(fDir, new Vec3(-1, 0, 0), this.headNode.worldRotation);
+        fDir.normalize();
+
+        const others = director.getScene()!.getComponentsInChildren(WormController);
+        
+        // Scan very close to the head (Step through 1 unit of distance)
+        for (let i = 1; i <= 10; i++) {
+            const scanDist = i * 0.1;
+            const probe = this.headNode.worldPosition.clone().add(fDir.clone().multiplyScalar(scanDist));
+
+            for (let other of others) {
+                if (other === this || !other.node.active) continue;
+                for (let part of other.allParts) {
+                    const dx = probe.x - part.worldPosition.x;
+                    const dz = probe.z - part.worldPosition.z;
+                    if (Math.sqrt(dx * dx + dz * dz) < 0.35) {
+                        return scanDist; // Return distance to first piece found
+                    }
+                }
+            }
+        }
+        return 99; // No blockage nearby
+    }
+
+    private playSnakeShake() {
+        const shakeMag = 0.12; 
+        const dur = 0.04;
+
+        this.allParts.forEach((part, index) => {
+            const startPos = part.getPosition();
+            tween(part)
+                .delay(index * 0.02) // Wave effect
+                .to(dur, { position: new Vec3(startPos.x + shakeMag, startPos.y, startPos.z) })
+                .to(dur * 2, { position: new Vec3(startPos.x - shakeMag, startPos.y, startPos.z) })
+                .to(dur, { position: startPos })
+                .start();
+        });
+    }
     public isIdle(): boolean { return this.state === SnakeState.IDLE; }
 
     private beginSlither() {
@@ -238,28 +286,36 @@ export class WormController extends Component {
         }
     }
 
-    public canSlitherOut(): boolean {
-        // Step 1: Pre-calculate the ACTUAL move direction
-        let predictDir = new Vec3();
-        Vec3.transformQuat(predictDir, new Vec3(-1, 0, 0), this.headNode.worldRotation);
-        predictDir.normalize();
+  public canSlitherOut(): boolean {
+        // Exactly calculate movement vector (Red Axis Forward)
+        let forwardVec = new Vec3();
+        Vec3.transformQuat(forwardVec, new Vec3(-1, 0, 0), this.headNode.worldRotation);
+        forwardVec.normalize();
 
-        // Step 2: Set the sensor point further out to ensure it detects the blockage
-        const sensor = this.headNode.worldPosition.clone().add(predictDir.clone().multiplyScalar(0.55));
-        
         const others = director.getScene()!.getComponentsInChildren(WormController);
-        for (let other of others) {
-            if (other === this || !other.node.active) continue;
-            for (let part of other.allParts) {
-                // If a piece of another snake is in the "Block Zone"
-                if (Vec3.distance(sensor, part.worldPosition) < 0.45) {
-                    let toPart = Vec3.subtract(new Vec3(), part.worldPosition, this.headNode.worldPosition).normalize();
-                    // Is the obstacle in our direct line of sight?
-                    if (Vec3.dot(predictDir, toPart) > 0.65) return false; 
+
+        // --- SCAN CORRIDOR: Check 10 points along a path to the circular rim ---
+        // Distance 0.2 to 2.5 covers most lanes
+        for (let i = 1; i <= 10; i++) {
+            const distance = i * 0.25; 
+            const checkPoint = this.headNode.worldPosition.clone().add(forwardVec.clone().multiplyScalar(distance));
+
+            for (let other of others) {
+                if (other === this || !other.node.active) continue;
+                for (let part of other.allParts) {
+                    // Check horizontal proximity (Ignoring Height)
+                    const dX = checkPoint.x - part.worldPosition.x;
+                    const dZ = checkPoint.z - part.worldPosition.z;
+                    const hDist = Math.sqrt(dX * dX + dZ * dZ);
+
+                    // Radius of snake body blockage check (0.35 - 0.40)
+                    if (hDist < 0.38) {
+                        return false; // Found a block!
+                    }
                 }
             }
         }
-        return true; // Path is definitely clear
+        return true; // Path is Clear!
     }
 
     private applyPathToBody() {
