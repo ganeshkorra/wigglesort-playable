@@ -1,6 +1,8 @@
 import { _decorator, Component, Node, input, Input, EventTouch, Camera, Vec3, Vec2, Quat, director } from 'cc';
 import { CirclePath } from './CirclePath';
 import { Hole } from './Hole';
+import { GameManager } from './GameManager';
+import { TutorialHand } from './TutorialHandManager';
 const { ccclass, property } = _decorator;
 
 enum SnakeState { IDLE, GOING, RETURNING, ENTERING_HOLE }
@@ -25,6 +27,7 @@ export class WormController extends Component {
     private startPathSize: number = 0;
     private startPositions: Vec3[] = [];
     private startRotations: Quat[] = [];
+    
 
     // Failsafe tracking
     private holeEntryTime: number = 0;
@@ -76,16 +79,40 @@ export class WormController extends Component {
 
     start() { input.on(Input.EventType.TOUCH_START, this.onTouchStart, this); }
 
-    onTouchStart(event: EventTouch) {
+onTouchStart(event: EventTouch) {
+    //  if (GameManager.instance) {
+    //         GameManager.instance.onUserInteraction();
+    //     }
+  if (GameManager.instance) {
+                    GameManager.instance.beginTimer();
+                }
         if (this.state !== SnakeState.IDLE) return;
+
+       if (TutorialHand.instance) {
+            TutorialHand.instance.resetIdleTimer();
+        }
+        const touchPos = event.getLocation(); 
         for (const part of this.allParts) {
-            const sPos = new Vec3(); this.mainCamera.worldToScreen(part.worldPosition, sPos);
-            if (Vec2.distance(event.getLocation(), new Vec2(sPos.x, sPos.y)) < 25) {
-                Vec3.transformQuat(this.moveDirection, new Vec3(-1, 0, 0), this.headNode.worldRotation);
-                this.moveDirection.normalize();
-                this.state = SnakeState.GOING; break;
+            const sPos = new Vec3();
+            this.mainCamera.worldToScreen(part.worldPosition, sPos);
+            
+            if (Vec2.distance(touchPos, new Vec2(sPos.x, sPos.y)) < 25) {
+                // START THE GAME TIMER ON FIRST SUCCESSFUL CLICK
+              
+                this.beginSlither();
+                break;
             }
         }
+    }
+// Add this to WormController class
+    public isIdle(): boolean {
+        // IDLE is the index 0 in your enum SnakeState { IDLE, GOING... }
+        return this.state === SnakeState.IDLE;
+    }
+private beginSlither() {
+        Vec3.transformQuat(this.moveDirection, new Vec3(-1, 0, 0), this.headNode.worldRotation);
+        this.moveDirection.normalize();
+        this.state = SnakeState.GOING;
     }
 
     update(dt: number) {
@@ -107,7 +134,38 @@ export class WormController extends Component {
         }
         this.applyPathToBody();
     }
+// Helper for the tutorial hand to check if this snake is open
+    public canSlitherOut(): boolean {
+        // Calculate what the direction WOULD be if clicked
+        let tempDir = new Vec3();
+        Vec3.transformQuat(tempDir, new Vec3(-1, 0, 0), this.headNode.worldRotation);
+        tempDir.normalize();
 
+        const others = director.getScene()!.getComponentsInChildren(WormController);
+        const sensor = this.headNode.worldPosition.clone().add(tempDir.clone().multiplyScalar(0.5));
+
+        for (let other of others) {
+            if (other === this || !other.node.active) continue;
+            for (let part of other.allParts) {
+                const dx = sensor.x - part.worldPosition.x;
+                const dz = sensor.z - part.worldPosition.z;
+                // If an obstacle is detected in the predicted path
+                if (Math.sqrt(dx * dx + dz * dz) < 0.35) {
+                    const toOther = new Vec3();
+                    Vec3.subtract(toOther, part.worldPosition, this.headNode.worldPosition);
+                    // Use the same Dot Product threshold from your movement code
+                    if (Vec3.dot(tempDir, toOther.normalize()) > 0.75) {
+                        return false; // It's blocked!
+                    }
+                }
+            }
+        }
+        return true; // The path is clear!
+    }
+
+     public getIsMoving(): boolean {
+        return this.state !== SnakeState.IDLE;
+    }
     private processGoingLogic(dt: number) {
         let headPos = this.headNode.worldPosition.clone();
         let next = headPos.add(this.moveDirection.clone().multiplyScalar(this.moveSpeed * dt));

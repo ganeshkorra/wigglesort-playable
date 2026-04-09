@@ -24,6 +24,9 @@ export class Hole extends Component {
     // Tracks which color is currently required
     private currentIndex: number = 0;
 
+public getNeededColor(): string {
+    return this.colorMappings[this.currentIndex].colorName;
+}
     onLoad() {
         if (this.colorMappings.length > 0) {
             this.updateHoleVisuals();
