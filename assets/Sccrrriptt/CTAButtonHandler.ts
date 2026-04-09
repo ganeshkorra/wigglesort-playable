@@ -1,7 +1,8 @@
 import { _decorator, Component, AudioSource, find, CCString, sys } from 'cc';
-import { ALAnalytics } from './metrics';
+import { ALAnalytics } from './ALAnalytics'; // Double check your filename matches
+import { GameManager } from './GameManager';
 
-// Declare the mraid object provided by the ad network environment
+// Standard MRAID declaration
 declare const mraid: any;
 
 const { ccclass, property } = _decorator;
@@ -10,11 +11,6 @@ const { ccclass, property } = _decorator;
 export class CTAButtonHandler extends Component {
     
     @property({
-
-
-
-
-        
         type: CCString,
         tooltip: 'Default Android Play Store URL'
     })
@@ -29,15 +25,13 @@ export class CTAButtonHandler extends Component {
     private isMraidReady: boolean = false;
 
     onLoad() {
-        // Check for MRAID environment
+        // AppLovin/MRAID initialization
         if (typeof mraid !== 'undefined') {
             if (mraid.getState() === 'loading') {
                 mraid.addEventListener('ready', this.onMraidReady.bind(this));
             } else {
                 this.onMraidReady();
             }
-        } else {
-            console.warn("MRAID library not found. Fallback to window.open.");
         }
     }
 
@@ -45,43 +39,41 @@ export class CTAButtonHandler extends Component {
         this.isMraidReady = true;
     }
 
-    /**
-     * Helper to get the correct URL based on Device OS
-     */
     private getTargetStoreUrl(): string {
+        // Auto-switch based on User Device
         if (sys.os === sys.OS.IOS) {
-            console.log("Device detected: iOS");
             return this.iosStoreUrl;
         } else {
-            // Default to Android for Android devices, Desktop browsers, and others
-            console.log("Device detected: Android/Other");
             return this.androidStoreUrl;
         }
     }
 
     /**
-     * Linked to the CTA button's click event in the Cocos Inspector
+     * ATTACH THIS TO YOUR BUTTON EVENT IN COCOS INSPECTOR
      */
     public onStoreButtonClicked(): void {
-        
         const targetUrl = this.getTargetStoreUrl();
-        console.log("CTA Triggered. Target URL:", targetUrl);
+        
+        // 1. TRACK ANALYTICS
         ALAnalytics.ctaClicked();
 
-        // 1. Stop audio before redirecting (Technical requirement)
-        const mainAudio = find("Canvas-001/GameCamera")?.getComponent(AudioSource);
-        if (mainAudio) {
-            mainAudio.stop();
+        // 2. TECHNICAL: Stop Game Music & Timer
+        if (GameManager.instance) {
+            // Stops BGM from the GameManager component
+            if (GameManager.instance.audioSource) {
+                GameManager.instance.audioSource.stop();
+            }
+            // Logic to prevent snakes from moving while window is opening
+            GameManager.instance.isTimerRunning = false; 
         }
 
-        // 2. Redirect using MRAID if available
-        if (this.isMraidReady) {
-            console.log("Calling mraid.open()");
+        // 3. REDIRECT Logic
+        if (typeof mraid !== 'undefined' && typeof mraid.open === 'function') {
+            console.log("MRAID Redirecting to:", targetUrl);
             mraid.open(targetUrl);
         } 
-        // 3. Browser fallback
         else {
-            console.log("MRAID not available. Calling window.open()");
+            console.log("Web browser redirecting to:", targetUrl);
             window.open(targetUrl, "_blank");
         }
     }
